@@ -22,11 +22,12 @@ def read_json(path_text: str) -> Any:
         message = f"Invalid JSON in '{path}' at line {error.lineno}, column {error.colno}."
         raise InputError(message) from error
     except OSError as error:
-        raise InputError(f"Cannot read '{path}': {error.strerror or error}") from error
+        raise InputError(f"Cannot read '{path}': {error.strerror or error}")
 
 
 def write_results(path_text: str, results: list[dict[str, Any]]) -> None:
-    """Write results as formatted JSON, creating the output directory if needed."""
+    """Write results as formatted JSON,
+        creating the output directory if needed."""
 
     path = Path(path_text)
     if path.exists() and not path.is_file():
@@ -37,4 +38,4 @@ def write_results(path_text: str, results: list[dict[str, Any]]) -> None:
             json.dump(results, output_file, indent=4, ensure_ascii=False)
             output_file.write("\n")
     except OSError as error:
-        raise InputError(f"Cannot write '{path}': {error.strerror or error}") from error
+        raise InputError(f"Cannot write '{path}': {error.strerror or error}")
