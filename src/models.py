@@ -15,7 +15,7 @@ SupportedType = Literal["string", "number", "integer", "boolean", "null"]
 class ParameterDefinition(BaseModel):
     """Describe one parameter accepted by a callable function."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     type: SupportedType
 
@@ -23,7 +23,7 @@ class ParameterDefinition(BaseModel):
 class FunctionDefinition(BaseModel):
     """Describe a function that the model is allowed to call."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
     description: str
@@ -34,7 +34,7 @@ class FunctionDefinition(BaseModel):
 class PromptInput(BaseModel):
     """Represent one natural-language function-calling request."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     prompt: str = Field(min_length=1)
 
@@ -55,32 +55,47 @@ def validate_functions(raw_data: Any) -> list[FunctionDefinition]:
     if not isinstance(raw_data, list) or not raw_data:
         raise InputError("Function definitions must be a non-empty JSON list.")
     try:
-        functions = [FunctionDefinition.model_validate(item) for item in raw_data]
+        functions = [FunctionDefinition.model_validate(
+            item) for item in raw_data]
     except ValidationError as error:
-        raise InputError(format_validation_error("function definitions", error)) from error
+        raise InputError(
+            format_validation_error("function definitions", error))
     names = [function.name for function in functions]
     if len(names) != len(set(names)):
-        raise InputError("Function definitions contain duplicate function names.")
+        raise InputError(
+            "Function definitions contain duplicate function names.")
     for function in functions:
         if any(not key for key in function.parameters):
-            raise InputError(f"Function '{function.name}' has an empty parameter name.")
+            raise InputError(
+                f"Function '{function.name}' has an empty parameter name.")
     return functions
 
 
 def validate_prompts(raw_data: Any) -> list[PromptInput]:
-    """Validate the input prompt list."""
+    """Validate the input prompt list and reject duplicate prompts."""
 
     if not isinstance(raw_data, list):
         raise InputError("Prompt input must be a JSON list.")
+
     try:
-        return [PromptInput.model_validate(item) for item in raw_data]
+        prompts = [PromptInput.model_validate(item) for item in raw_data]
     except ValidationError as error:
-        raise InputError(format_validation_error("prompt input", error)) from error
+        raise InputError(format_validation_error("prompt input", error))
+
+    prompt_values = [prompt.prompt for prompt in prompts]
+    if len(prompt_values) != len(set(prompt_values)):
+        raise InputError("Prompt input contains duplicate prompts.")
+
+    return prompts
 
 
 def format_validation_error(label: str, error: ValidationError) -> str:
-    """Turn the first Pydantic error into a compact user-facing message."""
+    """Turn Pydantic errors into compact user-facing messages."""
 
-    first_error = error.errors()[0]
-    location = ".".join(str(part) for part in first_error["loc"])
-    return f"Invalid {label} at {location}: {first_error['msg']}"
+    messages = []
+
+    for item in error.errors():
+        location = ".".join(str(part) for part in item["loc"])
+        messages.append(f"{location}: {item['msg']}")
+
+    return f"Invalid {label}: " + "; ".join(messages)
