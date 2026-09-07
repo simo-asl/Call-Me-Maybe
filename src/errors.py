@@ -6,7 +6,7 @@ class CallMeMaybeError(Exception):
 
 
 class InputError(CallMeMaybeError):
-    """Raised when an input file cannot be read or does not match its schema."""
+    """Raised when an input file cannot be read / does not match its schema."""
 
 
 class GenerationError(CallMeMaybeError):
