@@ -7,6 +7,7 @@ import re
 import string
 from dataclasses import dataclass
 from typing import Protocol
+from src.printing import GenerationVisualizer
 
 import numpy as np
 
@@ -54,6 +55,7 @@ class ConstrainedDecoder:
         self._model = model
         self._functions = functions
         self._cache = self._build_cache()
+        self._visualizer = GenerationVisualizer()
 
     def _build_cache(self) -> MaskCache:
         """Pre-compute masks and dictionaries exactly like original logic."""
@@ -195,6 +197,7 @@ class ConstrainedDecoder:
         bridge_injected = False
         max_tokens = 150
 
+        step = 1
         while (
             not current_str.replace(" ", "").replace("\n", "").endswith("}}")
             and len(input_ids) < len(prompt) + max_tokens
@@ -427,8 +430,24 @@ class ConstrainedDecoder:
 
             logits[~mask] = -np.inf
             best_id = int(np.argmax(logits))
-            current_str += self._cache.vocab_dict.get(best_id, "")
+
+            selected_token = self._cache.vocab_dict.get(
+                best_id,
+                "",
+            )
+
+            current_str += selected_token
             input_ids.append(best_id)
+
+            self._visualizer.show_step(
+                step=step,
+                token=selected_token,
+                allowed=int(np.count_nonzero(mask)),
+                vocab_size=vocab_size,
+                current=current_str,
+            )
+
+            step += 1
 
             if (
                 current_str.endswith('"')
