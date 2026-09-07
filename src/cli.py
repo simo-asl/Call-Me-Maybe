@@ -50,7 +50,8 @@ def main() -> None:
     arguments = parse_arguments()
     started_at = perf_counter()
     try:
-        functions = validate_functions(read_json(arguments.functions_definition))
+        functions = validate_functions(
+            read_json(arguments.functions_definition))
         prompts = validate_prompts(read_json(arguments.input))
         model = Small_LLM_Model(model_name=arguments.model)
         results = generate_calls(model, functions, prompts)
@@ -59,7 +60,10 @@ def main() -> None:
         print(f"Error: {error}", file=sys.stderr)
         raise SystemExit(1) from error
     except (OSError, RuntimeError, ValueError) as error:
-        print(f"Error while loading or running the LLM: {error}", file=sys.stderr)
+        print(
+                f"Error while loading or running the LLM: {error}",
+                file=sys.stderr
+                )
         raise SystemExit(1) from error
     elapsed = perf_counter() - started_at
     print(f"Wrote {len(results)} result(s) in {elapsed:.1f} seconds.")
