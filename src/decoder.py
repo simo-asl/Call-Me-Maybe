@@ -11,7 +11,7 @@ from typing import Protocol
 import numpy as np
 
 from src.errors import GenerationError, InputError
-from src.models import FunctionDefinition, ParameterDefinition
+from src.models import FunctionDefinition
 
 
 class LlmModel(Protocol):
@@ -56,7 +56,7 @@ class ConstrainedDecoder:
         self._cache = self._build_cache()
 
     def _build_cache(self) -> MaskCache:
-        """Pre-compute masks and dictionaries exactly like original implementation."""
+        """Pre-compute masks and dictionaries exactly like original logic."""
         try:
             with open(
                 self._model.get_path_to_vocab_file(),
@@ -64,10 +64,14 @@ class ConstrainedDecoder:
             ) as vocab_file:
                 raw_vocab = json.load(vocab_file)
         except (OSError, json.JSONDecodeError) as error:
-            raise InputError(f"Cannot load model vocabulary: {error}") from error
+            raise InputError(
+                f"Cannot load model vocabulary: {error}"
+            ) from error
 
         vocab_dict: dict[int, str] = {
-            v: k.replace("Ġ", " ") for k, v in raw_vocab.items() if isinstance(v, int)
+            v: k.replace("Ġ", " ")
+            for k, v in raw_vocab.items()
+            if isinstance(v, int)
         }
 
         printable_set = set(string.printable)
@@ -87,7 +91,9 @@ class ConstrainedDecoder:
             {
                 "name": f.name,
                 "description": f.description,
-                "parameters": {k: v.model_dump() for k, v in f.parameters.items()},
+                "parameters": {
+                    k: v.model_dump() for k, v in f.parameters.items()
+                },
             }
             for f in self._functions
         ]
@@ -107,7 +113,9 @@ class ConstrainedDecoder:
                         param_types[name][param_key] = details.get("type")
 
         dummy_ids = self._encode("dummy")
-        vocab_size = len(self._model.get_logits_from_input_ids(dummy_ids))
+        vocab_size = len(
+            self._model.get_logits_from_input_ids(dummy_ids)
+        )
 
         p4_mask = np.zeros(vocab_size, dtype=bool)
         p4_mask[valid_ids] = True
@@ -144,19 +152,24 @@ class ConstrainedDecoder:
         )
 
     def generate(self, user_prompt: str) -> dict[str, object]:
-        """Generate one structurally valid function call matching original logic."""
+        """Generate one structurally valid function call matching logic."""
         if not user_prompt.strip():
             raise GenerationError("User prompt cannot be empty.")
 
         optimized_schemas = []
         for f in self._cache.raw_functions:
-            optimized_schemas.append({
-                "name": f["name"],
-                "description": f.get("description", ""),
-                "parameters": f.get("parameters", {}),
-            })
+            optimized_schemas.append(
+                {
+                    "name": f["name"],
+                    "description": f.get("description", ""),
+                    "parameters": f.get("parameters", {}),
+                }
+            )
 
-        schema_hints = json.dumps(optimized_schemas, separators=(",", ":"))
+        schema_hints = json.dumps(
+            optimized_schemas,
+            separators=(",", ":"),
+        )
 
         prompt = (
             f"System: You are a strict API. Output ONLY valid JSON matching "
@@ -172,7 +185,9 @@ class ConstrainedDecoder:
         )
 
         input_ids = self._encode(prompt)
-        vocab_size = len(self._model.get_logits_from_input_ids(input_ids))
+        vocab_size = len(
+            self._model.get_logits_from_input_ids(input_ids)
+        )
 
         prefix = '{"name":"'
         current_str = prefix
@@ -188,11 +203,16 @@ class ConstrainedDecoder:
             if prefix in current_str and '","parameters":{' not in current_str:
                 after_prefix = current_str.split(prefix)[1]
                 possible_names = [
-                    n for n in self._cache.allowed_fn if n.startswith(after_prefix)
+                    n
+                    for n in self._cache.allowed_fn
+                    if n.startswith(after_prefix)
                 ]
 
-                if len(possible_names) == 1 and possible_names[0] != after_prefix:
-                    remainder = possible_names[0][len(after_prefix) :] + '"'
+                if (
+                    len(possible_names) == 1
+                    and possible_names[0] != after_prefix
+                ):
+                    remainder = possible_names[0][len(after_prefix):] + '"'
                     current_str += remainder
                     input_ids.extend(self._encode(remainder))
                     continue
@@ -215,17 +235,29 @@ class ConstrainedDecoder:
                     break
 
                 active_schema = next(
-                    (f for f in self._cache.raw_functions if f["name"] == func_name),
+                    (
+                        f
+                        for f in self._cache.raw_functions
+                        if f["name"] == func_name
+                    ),
                     None,
                 )
 
                 if active_schema:
                     tiny_schema = json.dumps(
-                        [{
-                            "name": active_schema["name"],
-                            "description": active_schema.get("description", ""),
-                            "parameters": active_schema.get("parameters", {}),
-                        }],
+                        [
+                            {
+                                "name": active_schema["name"],
+                                "description": active_schema.get(
+                                    "description",
+                                    "",
+                                ),
+                                "parameters": active_schema.get(
+                                    "parameters",
+                                    {},
+                                ),
+                            }
+                        ],
                         separators=(",", ":"),
                     )
 
@@ -250,13 +282,21 @@ class ConstrainedDecoder:
 
                 continue
 
-            rules = self._get_allowed_chars(current_str, self._cache.allowed_fn)
-            logits = np.array(self._model.get_logits_from_input_ids(input_ids))
+            rules = self._get_allowed_chars(
+                current_str,
+                self._cache.allowed_fn,
+            )
+            logits = np.array(
+                self._model.get_logits_from_input_ids(input_ids)
+            )
             mask = np.zeros(vocab_size, dtype=bool)
 
             if len(rules) > 10:
                 # PHASE 4: THE QUOTA & TYPE SHIELD
-                match = re.search(r'"name"\s*:\s*"([^"]+)', current_str)
+                match = re.search(
+                    r'"name"\s*:\s*"([^"]+)',
+                    current_str,
+                )
                 func_name = match.group(1) if match else ""
 
                 params_str = (
@@ -290,16 +330,25 @@ class ConstrainedDecoder:
 
                     active_key = ""
                     if is_inside_value:
-                        keys_found = re.findall(r'"([^"]+)"\s*:', params_str)
+                        keys_found = re.findall(
+                            r'"([^"]+)"\s*:',
+                            params_str,
+                        )
                         if keys_found:
                             active_key = keys_found[-1]
 
                     expected_type = self._cache.param_types.get(
-                        func_name, {}
+                        func_name,
+                        {},
                     ).get(active_key, "Any")
 
-                    param_count = len(re.findall(r'"([^"]+)"\s*:', params_str))
-                    target_count = self._cache.func_params.get(func_name, 99)
+                    param_count = len(
+                        re.findall(r'"([^"]+)"\s*:', params_str)
+                    )
+                    target_count = self._cache.func_params.get(
+                        func_name,
+                        99,
+                    )
 
                     # THE MASK ROUTER
                     if is_inside_value and expected_type == "number":
@@ -333,10 +382,14 @@ class ConstrainedDecoder:
                                 if " " in s:
                                     mask[i] = False
 
-                            if re.search(r'"regex"\s*:\s*"$', params_str):
+                            if re.search(
+                                r'"regex"\s*:\s*"$',
+                                params_str,
+                            ):
                                 for i, s in self._cache.clean_dict_items:
                                     if not any(
-                                        s.startswith(c) for c in ["[", "\\"]
+                                        s.startswith(c)
+                                        for c in ["[", "\\"]
                                     ):
                                         mask[i] = False
 
@@ -363,7 +416,9 @@ class ConstrainedDecoder:
                         if is_expecting_key:
                             for i, s in self._cache.clean_dict_items:
                                 cleaned = s.strip()
-                                if not (cleaned.startswith('"') or not cleaned):
+                                if not (
+                                    cleaned.startswith('"') or not cleaned
+                                ):
                                     mask[i] = False
             else:
                 for i, s in self._cache.mini_dict:
@@ -395,15 +450,18 @@ class ConstrainedDecoder:
         return extracted_dict
 
     @staticmethod
-    def _get_allowed_chars(current_str: str, allowed_names: list[str]) -> list[str]:
+    def _get_allowed_chars(
+        current_str: str,
+        allowed_names: list[str],
+    ) -> list[str]:
         prefix = '{"name":"'
         if len(current_str) < len(prefix):
-            return [prefix[len(current_str) :]]
+            return [prefix[len(current_str):]]
 
-        after_prefix = current_str[len(prefix) :]
+        after_prefix = current_str[len(prefix):]
         if '"' not in after_prefix:
             return [
-                name[len(after_prefix) :] + '"'
+                name[len(after_prefix):] + '"'
                 for name in allowed_names
                 if name.startswith(after_prefix)
             ]
@@ -411,7 +469,7 @@ class ConstrainedDecoder:
         func_name = after_prefix.split('"')[0]
         target = prefix + func_name + '","parameters":{'
         if len(current_str) < len(target):
-            return [target[len(current_str) :]]
+            return [target[len(current_str):]]
 
         return list(string.printable)
 
