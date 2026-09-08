@@ -19,7 +19,8 @@ def read_json(path_text: str) -> Any:
         with path.open("r", encoding="utf-8") as input_file:
             return json.load(input_file)
     except json.JSONDecodeError as error:
-        message = f"Invalid JSON in '{path}' at line {error.lineno}, column {error.colno}."
+        message = f"Invalid JSON in '{
+            path}' at line {error.lineno}, column {error.colno}."
         raise InputError(message) from error
     except OSError as error:
         raise InputError(f"Cannot read '{path}': {error.strerror or error}")

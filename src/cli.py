@@ -45,7 +45,8 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def main() -> None:
-    """Run the application and convert expected failures to a clear exit status."""
+    """Run the application and convert expected failures to a clear exit
+    status."""
 
     arguments = parse_arguments()
     started_at = perf_counter()

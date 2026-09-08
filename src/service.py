@@ -14,7 +14,8 @@ def generate_calls(
     functions: list[FunctionDefinition],
     prompts: list[PromptInput],
 ) -> list[dict[str, Any]]:
-    """Generate and validate one schema-conforming call for every input prompt."""
+    """Generate and validate one schema-conforming
+    call for every input prompt."""
 
     decoder = ConstrainedDecoder(model, functions)
     by_name = {function.name: function for function in functions}
@@ -24,7 +25,8 @@ def generate_calls(
         name = generated["name"]
         parameters = generated["parameters"]
         if not isinstance(name, str) or not isinstance(parameters, dict):
-            raise GenerationError("Decoder returned an invalid function-call structure.")
+            raise GenerationError(
+                "Decoder returned an invalid function-call structure.")
         _validate_call_against_schema(name, parameters, by_name)
         result = FunctionCall(
             prompt=prompt.prompt,
@@ -46,10 +48,12 @@ def _validate_call_against_schema(
     if function is None:
         raise GenerationError(f"Generated unknown function name '{name}'.")
     if set(parameters) != set(function.parameters):
-        raise GenerationError("Generated parameters do not exactly match the selected schema.")
+        raise GenerationError(
+            "Generated parameters do not exactly match the selected schema.")
     for key, definition in function.parameters.items():
         if not _value_matches_type(parameters[key], definition.type):
-            message = f"Generated parameter '{key}' does not match type '{definition.type}'."
+            message = f"Generated parameter '{
+                key}' does not match type '{definition.type}'."
             raise GenerationError(message)
 
 
