@@ -164,7 +164,7 @@ def analyze_parameters(
     )
 
 
-def _try_teleport(
+def try_teleport(
     self: Any,
     current_str: str,
     input_ids: list[int],
@@ -198,7 +198,7 @@ def _try_teleport(
     return current_str, True
 
 
-def _inject_bridge_after_token(
+def inject_bridge_after_token(
     self: Any,
     current_str: str,
     input_ids: list[int],
@@ -212,7 +212,7 @@ def _inject_bridge_after_token(
     ):
         return current_str, bridge_injected
 
-    bridge = '","parameters":{'
+    bridge = ',"parameters":{'
 
     current_str += bridge
     input_ids.extend(self._encode(bridge))
@@ -220,7 +220,7 @@ def _inject_bridge_after_token(
     return current_str, True
 
 
-def _select_token(
+def select_token(
     self: Any,
     input_ids: list[int],
     mask: np.ndarray,

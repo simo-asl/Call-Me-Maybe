@@ -12,9 +12,9 @@ import numpy as np
 
 from src.errors import GenerationError, InputError
 from src.generation_utils import (
-    _inject_bridge_after_token,
-    _select_token,
-    _try_teleport,
+    inject_bridge_after_token,
+    select_token,
+    try_teleport,
     ParameterState,
     analyze_parameters,
     build_prompt,
@@ -402,7 +402,7 @@ class ConstrainedDecoder:
             not current_str.replace(" ", "").replace("\n", "").endswith("}}")
             and len(input_ids) < len(prompt) + max_tokens
         ):
-            current_str, teleported = _try_teleport(
+            current_str, teleported = try_teleport(
                 self,
                 current_str,
                 input_ids,
@@ -446,7 +446,7 @@ class ConstrainedDecoder:
             if finished:
                 break
 
-            best_id, selected_token = _select_token(
+            best_id, selected_token = select_token(
                 self,
                 input_ids,
                 mask,
@@ -465,7 +465,7 @@ class ConstrainedDecoder:
 
             step += 1
 
-            current_str, bridge_injected = _inject_bridge_after_token(
+            current_str, bridge_injected = inject_bridge_after_token(
                 self,
                 current_str,
                 input_ids,
