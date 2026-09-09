@@ -12,31 +12,38 @@ from src.printing import Colors
 
 
 class FakeModel:
-    """Minimal model interface used to test decoder setup without inference."""
+    """Provide the minimal model API needed to initialize the decoder."""
 
     def __init__(self, vocab_path: str) -> None:
+        """Store the path to the temporary tokenizer vocabulary."""
         self.vocab_path = vocab_path
 
     def encode(self, text: str) -> list[int]:
+        """Return a minimal token sequence for decoder setup tests."""
         return [0]
 
     def get_logits_from_input_ids(self, input_ids: list[int]) -> list[float]:
+        """Return fixed logits matching the size of the fake vocabulary."""
         return [0.0] * 8
 
     def get_path_to_vocab_file(self) -> str:
+        """Return the temporary vocabulary file used by the test model."""
         return self.vocab_path
 
 
 class CoreProjectTests(unittest.TestCase):
-    """Verify the stable guarantees provided by the project."""
+    """Verify important guarantees of the function-calling pipeline."""
 
     def _title(self, text: str) -> None:
+        """Print a colored title describing the current test."""
         print(f"\n{Colors.YELLOW}=== {text} ==={Colors.RESET}")
 
     def _pass(self) -> None:
+        """Print a colored success marker after a completed test."""
         print(f"{Colors.GREEN}[PASS]{Colors.RESET}")
 
     def test_schema_validation_rejects_duplicate_functions(self) -> None:
+        """Ensure duplicate function names are rejected during validation."""
         self._title("TEST 3: SCHEMA VALIDATION")
         print("Input: two function definitions named 'add'")
         print("Expected: duplicate function names must be rejected")
@@ -54,6 +61,7 @@ class CoreProjectTests(unittest.TestCase):
         self._pass()
 
     def test_decoder_builds_schema_cache(self) -> None:
+        """Ensure the decoder cache correctly reflects a function schema."""
         self._title("TEST 1: CONSTRAINED DECODER CACHE")
         print("Function: add")
         print("Schema: a -> number, b -> number")
@@ -93,6 +101,7 @@ class CoreProjectTests(unittest.TestCase):
         self._pass()
 
     def test_decoder_rejects_empty_prompt(self) -> None:
+        """Ensure an empty prompt fails gracefully with GenerationError."""
         self._title("TEST 2: EMPTY PROMPT SAFETY")
         print("Input prompt: whitespace only")
         print("Expected: controlled GenerationError, no unexpected crash")
