@@ -10,7 +10,18 @@ from src.errors import InputError
 
 
 def read_json(path_text: str) -> Any:
-    """Read JSON from an existing regular file with useful error messages."""
+    """Read and decode JSON from an existing regular file.
+
+    Args:
+        path_text: Path of the input JSON file.
+
+    Returns:
+        Decoded JSON value.
+
+    Raises:
+        InputError: If the path is not a file, cannot be read, or contains
+            invalid JSON.
+    """
 
     path = Path(path_text)
     if not path.is_file():
@@ -22,13 +33,20 @@ def read_json(path_text: str) -> Any:
         message = f"Invalid JSON in '{
             path}' at line {error.lineno}, column {error.colno}."
         raise InputError(message) from error
-    except OSError as error:
-        raise InputError(f"Cannot read '{path}': {error.strerror or error}")
+    except OSError:
+        raise InputError(f"Cannot read '{path}'")
 
 
 def write_results(path_text: str, results: list[dict[str, Any]]) -> None:
-    """Write results as formatted JSON,
-        creating the output directory if needed."""
+    """Write results as indented JSON, creating parent directories if needed.
+
+    Args:
+        path_text: Destination path for the JSON file.
+        results: Function-call result objects to serialize.
+
+    Raises:
+        InputError: If the destination is not a file or cannot be written.
+    """
 
     path = Path(path_text)
     if path.exists() and not path.is_file():

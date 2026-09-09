@@ -13,7 +13,11 @@ SupportedType = Literal["string", "number", "integer", "boolean", "null"]
 
 
 class ParameterDefinition(BaseModel):
-    """Describe one parameter accepted by a callable function."""
+    """Describe one parameter accepted by a callable function.
+
+    Attributes:
+        type: Supported JSON value type for the parameter.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -21,7 +25,14 @@ class ParameterDefinition(BaseModel):
 
 
 class FunctionDefinition(BaseModel):
-    """Describe a function that the model is allowed to call."""
+    """Describe a function that the model is allowed to call.
+
+    Attributes:
+        name: Non-empty callable function name.
+        description: Natural-language description supplied in the input.
+        parameters: Parameter definitions indexed by parameter name.
+        returns: JSON-ready description of the return value.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -32,7 +43,11 @@ class FunctionDefinition(BaseModel):
 
 
 class PromptInput(BaseModel):
-    """Represent one natural-language function-calling request."""
+    """Represent one natural-language function-calling request.
+
+    Attributes:
+        prompt: Non-empty request to turn into a function call.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -40,7 +55,13 @@ class PromptInput(BaseModel):
 
 
 class FunctionCall(BaseModel):
-    """The exact structure written for each successful request."""
+    """Represent the exact structure written for each successful request.
+
+    Attributes:
+        prompt: Original natural-language request.
+        name: Selected function name.
+        parameters: Arguments for the selected function.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
@@ -50,7 +71,17 @@ class FunctionCall(BaseModel):
 
 
 def validate_functions(raw_data: Any) -> list[FunctionDefinition]:
-    """Validate function definitions and reject duplicate names and keys."""
+    """Validate function definitions and reject duplicate names or empty keys.
+
+    Args:
+        raw_data: Decoded JSON value expected to contain definitions.
+
+    Returns:
+        Validated function definitions.
+
+    Raises:
+        InputError: If definitions are empty, malformed, or duplicate.
+    """
 
     if not isinstance(raw_data, list) or not raw_data:
         raise InputError("Function definitions must be a non-empty JSON list.")
@@ -72,7 +103,17 @@ def validate_functions(raw_data: Any) -> list[FunctionDefinition]:
 
 
 def validate_prompts(raw_data: Any) -> list[PromptInput]:
-    """Validate the input prompt list and reject duplicate prompts."""
+    """Validate input prompts and reject duplicate prompt text.
+
+    Args:
+        raw_data: Decoded JSON value expected to contain prompts.
+
+    Returns:
+        Validated prompt objects.
+
+    Raises:
+        InputError: If the input is malformed or contains duplicates.
+    """
 
     if not isinstance(raw_data, list):
         raise InputError("Prompt input must be a JSON list.")
@@ -90,7 +131,15 @@ def validate_prompts(raw_data: Any) -> list[PromptInput]:
 
 
 def format_validation_error(label: str, error: ValidationError) -> str:
-    """Turn Pydantic errors into compact user-facing messages."""
+    """Convert Pydantic validation details into a compact error message.
+
+    Args:
+        label: Human-readable name of the invalid input category.
+        error: Pydantic exception to format.
+
+    Returns:
+        Single-line message describing the validation failures.
+    """
 
     messages = []
 

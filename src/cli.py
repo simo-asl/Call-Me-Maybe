@@ -15,7 +15,11 @@ from src.service import generate_calls
 
 
 def parse_arguments() -> argparse.Namespace:
-    """Parse supported project command-line options."""
+    """Parse the supported command-line options.
+
+    Returns:
+        Namespace containing input, output, and model settings.
+    """
 
     parser = argparse.ArgumentParser(
         prog="Call Me Maybe",
@@ -45,8 +49,12 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def main() -> None:
-    """Run the application and convert expected failures to a clear exit
-    status."""
+    """Run generation, write results, and report expected errors to stderr.
+
+    Raises:
+        SystemExit: With status 1 when an expected input or generation error
+            occurs.
+    """
 
     arguments = parse_arguments()
     started_at = perf_counter()

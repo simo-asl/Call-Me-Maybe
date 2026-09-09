@@ -29,21 +29,48 @@ class LlmModel(Protocol):
     """Public subset of ``llm_sdk.Small_LLM_Model`` used by this project."""
 
     def encode(self, text: str) -> object:
-        """Encode text as a tensor-like value containing input token ids."""
+        """Encode text as a tensor-like value containing input token IDs.
+
+        Args:
+            text: Text to tokenize.
+
+        Returns:
+            A tensor-like object or iterable containing token IDs.
+        """
 
     def get_logits_from_input_ids(
         self,
         input_ids: list[int],
     ) -> list[float]:
-        """Return next-token logits for the supplied token ids."""
+        """Return next-token logits for the supplied token IDs.
+
+        Args:
+            input_ids: Existing token-ID sequence.
+
+        Returns:
+            One logit for each tokenizer vocabulary entry.
+        """
 
     def get_path_to_vocab_file(self) -> str:
-        """Return the path of the tokenizer vocabulary JSON file."""
+        """Return the path to the tokenizer vocabulary JSON file."""
 
 
 @dataclass
 class MaskCache:
-    """Cache structure matching the original project logic."""
+    """Store vocabulary data and reusable masks for constrained generation.
+
+    Attributes:
+        raw_functions: Serialized definitions used in generation prompts.
+        allowed_fn: Function names permitted in generated calls.
+        func_params: Expected parameter count indexed by function name.
+        param_types: Parameter types indexed by function and parameter name.
+        vocab_dict: Token text indexed by vocabulary ID.
+        clean_dict_items: Printable vocabulary ID and text pairs.
+        mini_dict: Vocabulary entries relevant to JSON structure generation.
+        p4_mask: Mask for all printable vocabulary entries.
+        p4_numbers_only: Mask for numeric-value generation.
+        p4_no_comma: Printable-entry mask with comma-containing tokens removed.
+    """
 
     raw_functions: list[dict[str, object]]
     allowed_fn: list[str]
@@ -58,20 +85,40 @@ class MaskCache:
 
 
 class ConstrainedDecoder:
-    """Generate valid JSON function calls using token-level constraints."""
+    """Generate valid JSON function calls with token-level constraints.
+
+    Attributes:
+        _model: Language-model interface used to score next tokens.
+        _functions: Validated definitions available to the model.
+        _cache: Derived vocabulary data and token masks.
+        _visualizer: Terminal renderer for each generated token.
+    """
 
     def __init__(
         self,
         model: LlmModel,
         functions: list[FunctionDefinition],
     ) -> None:
+        """Initialize the decoder and build its reusable vocabulary cache.
+
+        Args:
+            model: Model exposing the required public SDK operations.
+            functions: Validated functions that may be selected.
+        """
         self._model = model
         self._functions = functions
         self._cache = self._build_cache()
         self._visualizer = GenerationVisualizer()
 
     def _build_cache(self) -> MaskCache:
-        """Pre-compute masks and dictionaries exactly like original logic."""
+        """Build vocabulary lookups and masks used while decoding.
+
+        Returns:
+            Cached function metadata, vocabulary fragments, and masks.
+
+        Raises:
+            InputError: If the model vocabulary cannot be read as JSON.
+        """
         try:
             with open(
                 self._model.get_path_to_vocab_file(),
@@ -195,6 +242,19 @@ class ConstrainedDecoder:
         prefix: str,
         bridge_injected: bool,
     ) -> tuple[str, list[int], bool, bool, bool]:
+        """Insert the parameter bridge after a completed function name.
+
+        Args:
+            current_str: Function-call JSON generated so far.
+            input_ids: Token IDs representing the active model context.
+            user_prompt: Original prompt being converted to a function call.
+            prefix: Fixed JSON prefix preceding the function name.
+            bridge_injected: Whether the parameter bridge was already inserted.
+
+        Returns:
+            Updated text and IDs, followed by bridge, completion, and
+            step-skipping flags.
+        """
         if (
             not current_str.endswith('"')
             or bridge_injected
@@ -236,6 +296,14 @@ class ConstrainedDecoder:
         return current_str, input_ids, bridge_injected, False, True
 
     def _build_number_mask(self, state: ParameterState) -> np.ndarray:
+        """Create a mask appropriate for the current numeric parameter.
+
+        Args:
+            state: Parsed state of the parameters object.
+
+        Returns:
+            Boolean vocabulary mask for numeric fragments.
+        """
         mask = self._cache.p4_numbers_only.copy()
         current_value = state.params_str[
             state.last_structural_colon + 1:
@@ -254,6 +322,14 @@ class ConstrainedDecoder:
         return mask
 
     def _build_string_mask(self, state: ParameterState) -> np.ndarray:
+        """Create a mask appropriate for the current string parameter.
+
+        Args:
+            state: Parsed state of the parameters object.
+
+        Returns:
+            Boolean vocabulary mask for string fragments.
+        """
         mask = self._cache.p4_mask.copy()
 
         if state.param_count == state.target_count:
@@ -283,6 +359,15 @@ class ConstrainedDecoder:
         self,
         current_str: str,
     ) -> tuple[np.ndarray, str, bool]:
+        """Complete a parameter object once all expected keys are present.
+
+        Args:
+            current_str: Function-call JSON generated so far.
+
+        Returns:
+            A comma-free mask, possibly completed JSON text, and whether
+            generation should stop.
+        """
         clean_str = current_str.strip()
 
         if clean_str.endswith('"'):
@@ -300,6 +385,14 @@ class ConstrainedDecoder:
         self,
         state: ParameterState,
     ) -> np.ndarray:
+        """Create a mask for generating a parameter key or punctuation.
+
+        Args:
+            state: Parsed state of the parameters object.
+
+        Returns:
+            Boolean vocabulary mask for the next parameter structure token.
+        """
         mask = self._cache.p4_mask.copy()
         is_expecting_key = (
             state.params_str.strip().endswith("{")
@@ -323,6 +416,15 @@ class ConstrainedDecoder:
         rules: list[str],
         vocab_size: int,
     ) -> np.ndarray:
+        """Create a mask for fixed JSON and function-name prefixes.
+
+        Args:
+            rules: Remaining valid structural strings.
+            vocab_size: Number of entries in the model vocabulary.
+
+        Returns:
+            Boolean vocabulary mask for prefixes matching a rule.
+        """
         mask = np.zeros(vocab_size, dtype=bool)
 
         for token_id, token_str in self._cache.mini_dict:
@@ -340,6 +442,16 @@ class ConstrainedDecoder:
         rules: list[str],
         vocab_size: int,
     ) -> tuple[np.ndarray, str, bool]:
+        """Choose the vocabulary mask for the current generation state.
+
+        Args:
+            current_str: Function-call JSON generated so far.
+            rules: Remaining valid fixed-prefix strings.
+            vocab_size: Number of entries in the model vocabulary.
+
+        Returns:
+            A mask, possibly updated text, and a completion flag.
+        """
         if len(rules) <= 10:
             return (
                 self._build_structural_mask(rules, vocab_size),
@@ -376,7 +488,18 @@ class ConstrainedDecoder:
         return self._build_parameter_key_mask(state), current_str, False
 
     def generate(self, user_prompt: str) -> dict[str, object]:
-        """Generate one structurally valid function call matching logic."""
+        """Generate one parseable JSON function-call object for a prompt.
+
+        Args:
+            user_prompt: Natural-language request to convert into a call.
+
+        Returns:
+            Parsed JSON object generated under the decoder's constraints.
+
+        Raises:
+            GenerationError: If the prompt is empty or generated text is not
+                parseable JSON.
+        """
         if not user_prompt.strip():
             raise GenerationError("User prompt cannot be empty.")
 
@@ -481,6 +604,14 @@ class ConstrainedDecoder:
             ) from error
 
     def _encode(self, text: str) -> list[int]:
+        """Normalize the model's encoded representation to a token-ID list.
+
+        Args:
+            text: Text to encode with the configured model.
+
+        Returns:
+            Token IDs extracted from the model's return value.
+        """
         encoded = cast(Any, self._model.encode(text))
 
         try:

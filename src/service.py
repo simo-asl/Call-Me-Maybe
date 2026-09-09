@@ -14,8 +14,20 @@ def generate_calls(
     functions: list[FunctionDefinition],
     prompts: list[PromptInput],
 ) -> list[dict[str, Any]]:
-    """Generate and validate one schema-conforming
-    call for every input prompt."""
+    """Generate and validate one schema-conforming call per prompt.
+
+    Args:
+        model: Model used by the constrained decoder.
+        functions: Validated definitions available for selection.
+        prompts: Validated natural-language requests to process.
+
+    Returns:
+        JSON-ready function-call results in prompt order.
+
+    Raises:
+        GenerationError: If a generated call has an invalid structure, name,
+            parameter set, or parameter value type.
+    """
 
     decoder = ConstrainedDecoder(model, functions)
     by_name = {function.name: function for function in functions}
@@ -42,7 +54,16 @@ def _validate_call_against_schema(
     parameters: dict[str, object],
     functions: dict[str, FunctionDefinition],
 ) -> None:
-    """Defensively verify keys and Python values before writing the result."""
+    """Verify a generated call exactly matches its selected schema.
+
+    Args:
+        name: Name of the selected function.
+        parameters: Generated arguments for that function.
+        functions: Validated definitions indexed by function name.
+
+    Raises:
+        GenerationError: If the name, keys, or value types are invalid.
+    """
 
     function = functions.get(name)
     if function is None:
@@ -58,7 +79,15 @@ def _validate_call_against_schema(
 
 
 def _value_matches_type(value: object, expected: str) -> bool:
-    """Return whether a decoded JSON value has the expected schema type."""
+    """Return whether a decoded JSON value matches the expected schema type.
+
+    Args:
+        value: Decoded JSON value to check.
+        expected: Supported schema type name.
+
+    Returns:
+        Whether the value conforms to the expected type.
+    """
 
     if expected == "string":
         return isinstance(value, str)

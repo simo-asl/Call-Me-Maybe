@@ -11,6 +11,18 @@ import numpy as np
 
 @dataclass
 class ParameterState:
+    """Represent the parameter-object state inferred from generated JSON.
+
+    Attributes:
+        params_str: Parameter portion of the partial JSON text.
+        in_string: Whether parsing ends inside a JSON string.
+        is_inside_value: Whether parsing ends after a parameter colon.
+        active_key: Name of the parameter currently receiving a value.
+        expected_type: Schema type expected for the active parameter.
+        param_count: Number of parameter keys already seen.
+        target_count: Number of parameters required by the selected function.
+        last_structural_colon: Index of the latest colon outside a string.
+    """
     params_str: str
     in_string: bool
     is_inside_value: bool
@@ -25,6 +37,15 @@ def build_prompt(
     raw_functions: list[dict[str, object]],
     user_prompt: str,
 ) -> str:
+    """Build the full instruction and tool-call prefix for a prompt.
+
+    Args:
+        raw_functions: JSON-ready function definitions to embed in the prompt.
+        user_prompt: Natural-language request to convert into a function call.
+
+    Returns:
+        Model prompt ending at the function-call generation position.
+    """
     schema_hints = json.dumps(
         raw_functions,
         separators=(",", ":"),
@@ -49,6 +70,16 @@ def build_tiny_prompt(
     user_prompt: str,
     current_str: str,
 ) -> str:
+    """Build a reduced prompt after a function has been selected.
+
+    Args:
+        schema: JSON-ready definition for the selected function.
+        user_prompt: Original natural-language request.
+        current_str: Partial function-call JSON to continue.
+
+    Returns:
+        Prompt containing one schema and the partial generated call.
+    """
     tiny_schema = json.dumps(
         [schema],
         separators=(",", ":"),
@@ -73,6 +104,15 @@ def get_allowed_chars(
     current_str: str,
     allowed_names: list[str],
 ) -> list[str]:
+    """Return fixed JSON fragments still valid at the current position.
+
+    Args:
+        current_str: Function-call JSON generated so far.
+        allowed_names: Function names available for selection.
+
+    Returns:
+        Remaining structural fragments or printable characters.
+    """
     prefix = '{"name":"'
     after_prefix = current_str[len(prefix):]
 
@@ -98,6 +138,17 @@ def analyze_parameters(
     param_types: dict[str, dict[str, object]],
     func_params: dict[str, int],
 ) -> ParameterState | None:
+    """Infer parameter parsing state from a partial function-call JSON string.
+
+    Args:
+        current_str: Function-call JSON generated so far.
+        func_name: Selected function name, if available.
+        param_types: Parameter types indexed by function and parameter name.
+        func_params: Expected parameter count indexed by function name.
+
+    Returns:
+        Parsed parameter state, or ``None`` before parameters begin.
+    """
     if '"parameters"' not in current_str:
         return None
 
@@ -170,6 +221,17 @@ def try_teleport(
     input_ids: list[int],
     prefix: str,
 ) -> tuple[str, bool]:
+    """Finish an unambiguous function name without model inference.
+
+    Args:
+        self: Decoder instance providing cache and encoding operations.
+        current_str: Function-call JSON generated so far.
+        input_ids: Token IDs representing the active model context.
+        prefix: Fixed JSON prefix preceding the function name.
+
+    Returns:
+        Updated generated text and whether a completion was applied.
+    """
     if (
         prefix not in current_str
         or '","parameters":{' in current_str
@@ -205,6 +267,18 @@ def inject_bridge_after_token(
     prefix: str,
     bridge_injected: bool,
 ) -> tuple[str, bool]:
+    """Insert the fixed parameter bridge after a function-name token.
+
+    Args:
+        self: Decoder instance providing encoding operations.
+        current_str: Function-call JSON generated so far.
+        input_ids: Token IDs representing the active model context.
+        prefix: Fixed JSON prefix preceding the function name.
+        bridge_injected: Whether the parameter bridge already exists.
+
+    Returns:
+        Updated generated text and bridge-insertion status.
+    """
     if (
         not current_str.endswith('"')
         or bridge_injected
@@ -225,6 +299,16 @@ def select_token(
     input_ids: list[int],
     mask: np.ndarray,
 ) -> tuple[int, str]:
+    """Select the highest-logit token allowed by a boolean mask.
+
+    Args:
+        self: Decoder instance providing model and vocabulary access.
+        input_ids: Token IDs representing the active model context.
+        mask: Boolean array marking token IDs allowed for selection.
+
+    Returns:
+        Selected vocabulary ID and its text fragment.
+    """
     logits = np.array(
         self._model.get_logits_from_input_ids(input_ids)
     )
