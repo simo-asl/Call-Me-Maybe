@@ -331,10 +331,15 @@ class ConstrainedDecoder:
             Boolean vocabulary mask for string fragments.
         """
         mask = self._cache.p4_mask.copy()
+        if not state.in_string:
+            for token_id, token_str in self._cache.clean_dict_items:
+                if not token_str.strip().startswith('"'):
+                    mask[token_id] = False
 
         if state.param_count == state.target_count:
             for token_id, token_str in self._cache.clean_dict_items:
-                if '",' in token_str.replace(" ", ""):
+                cleaned = token_str.replace(" ", "")
+                if '",' in cleaned or '"},' in cleaned:
                     mask[token_id] = False
 
         if state.active_key == "regex":
@@ -384,30 +389,48 @@ class ConstrainedDecoder:
     def _build_parameter_key_mask(
         self,
         state: ParameterState,
+        func_name: str,
     ) -> np.ndarray:
-        """Create a mask for generating a parameter key or punctuation.
+        """Create a mask limited to valid unused parameter keys.
 
         Args:
             state: Parsed state of the parameters object.
+            func_name: Name of the selected function.
 
         Returns:
-            Boolean vocabulary mask for the next parameter structure token.
+            Boolean vocabulary mask for valid parameter-key continuations.
         """
-        mask = self._cache.p4_mask.copy()
-        is_expecting_key = (
-            state.params_str.strip().endswith("{")
-            or state.params_str.strip().endswith(",")
+        mask = np.zeros_like(
+                self._cache.p4_mask,
+                dtype=bool,
+            )
+        allowed_keys = [
+            key
+            for key in self._cache.param_types.get(func_name, {})
+            if key not in state.used_keys
+        ]
+
+        params_str = state.params_str
+        key_start = max(
+            params_str.rfind("{"),
+            params_str.rfind(","),
         )
 
-        if is_expecting_key:
-            for token_id, token_str in self._cache.clean_dict_items:
-                cleaned = token_str.strip()
+        current_fragment = params_str[key_start + 1:].strip()
 
-                if not (
-                    cleaned.startswith('"')
-                    or not cleaned
-                ):
-                    mask[token_id] = False
+        targets = [
+            f'"{key}":'
+            for key in allowed_keys
+        ]
+
+        for token_id, token_str in self._cache.clean_dict_items:
+            candidate = current_fragment + token_str
+
+            if any(
+                target.startswith(candidate)
+                for target in targets
+            ):
+                mask[token_id] = True
 
         return mask
 
@@ -442,15 +465,16 @@ class ConstrainedDecoder:
         rules: list[str],
         vocab_size: int,
     ) -> tuple[np.ndarray, str, bool]:
-        """Choose the vocabulary mask for the current generation state.
+        """Build the token mask for the current generation state.
 
         Args:
-            current_str: Function-call JSON generated so far.
-            rules: Remaining valid fixed-prefix strings.
-            vocab_size: Number of entries in the model vocabulary.
+            current_str: JSON string generated so far.
+            rules: Structural generation rules currently being followed.
+            vocab_size: Number of tokens in the model vocabulary.
 
         Returns:
-            A mask, possibly updated text, and a completion flag.
+            A tuple containing the token mask, current generated string,
+            and whether generation should stop.
         """
         if len(rules) <= 10:
             return (
@@ -479,13 +503,28 @@ class ConstrainedDecoder:
         if state.is_inside_value and state.expected_type == "number":
             return self._build_number_mask(state), current_str, False
 
-        if state.is_inside_value and state.in_string:
+        current_value = state.params_str[
+            state.last_structural_colon + 1:
+        ].strip()
+
+        if (
+            state.is_inside_value
+            and state.expected_type == "string"
+            and (
+                state.in_string
+                or not current_value
+            )
+        ):
             return self._build_string_mask(state), current_str, False
 
         if state.param_count == state.target_count:
             return self._finish_parameter_mask(current_str)
 
-        return self._build_parameter_key_mask(state), current_str, False
+        return (
+            self._build_parameter_key_mask(state, func_name),
+            current_str,
+            False,
+        )
 
     def generate(self, user_prompt: str) -> dict[str, object]:
         """Generate one parseable JSON function-call object for a prompt.
