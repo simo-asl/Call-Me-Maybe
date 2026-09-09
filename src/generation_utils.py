@@ -22,7 +22,9 @@ class ParameterState:
         param_count: Number of parameter keys already seen.
         target_count: Number of parameters required by the selected function.
         last_structural_colon: Index of the latest colon outside a string.
+        used_keys: Parameter names already generated.
     """
+
     params_str: str
     in_string: bool
     is_inside_value: bool
@@ -31,6 +33,7 @@ class ParameterState:
     param_count: int
     target_count: int
     last_structural_colon: int
+    used_keys: list[str]
 
 
 def build_prompt(
@@ -152,7 +155,7 @@ def analyze_parameters(
     if '"parameters"' not in current_str:
         return None
 
-    params_str = current_str.split('"parameters"')[1]
+    params_str = current_str.split('"parameters"', 1)[1]
 
     if not params_str:
         return None
@@ -212,6 +215,7 @@ def analyze_parameters(
         param_count=len(keys),
         target_count=func_params.get(func_name, 99),
         last_structural_colon=last_colon,
+        used_keys=keys,
     )
 
 
