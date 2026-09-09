@@ -37,7 +37,7 @@ class CoreProjectTests(unittest.TestCase):
         print(f"{Colors.GREEN}[PASS]{Colors.RESET}")
 
     def test_schema_validation_rejects_duplicate_functions(self) -> None:
-        self._title("TEST 1: SCHEMA VALIDATION")
+        self._title("TEST 3: SCHEMA VALIDATION")
         print("Input: two function definitions named 'add'")
         print("Expected: duplicate function names must be rejected")
 
@@ -54,7 +54,7 @@ class CoreProjectTests(unittest.TestCase):
         self._pass()
 
     def test_decoder_builds_schema_cache(self) -> None:
-        self._title("TEST 2: CONSTRAINED DECODER CACHE")
+        self._title("TEST 1: CONSTRAINED DECODER CACHE")
         print("Function: add")
         print("Schema: a -> number, b -> number")
         print("Action: build ConstrainedDecoder cache from the schema")
@@ -75,7 +75,8 @@ class CoreProjectTests(unittest.TestCase):
                             "name": 4, "parameters": 5, "0": 6, ".": 7}),
                 encoding="utf-8",
             )
-            decoder = ConstrainedDecoder(FakeModel(str(vocab_path)), [function])
+            decoder = ConstrainedDecoder(
+                FakeModel(str(vocab_path)), [function])
 
             self.assertEqual(decoder._cache.allowed_fn, ["add"])
             self.assertEqual(decoder._cache.func_params["add"], 2)
@@ -92,7 +93,7 @@ class CoreProjectTests(unittest.TestCase):
         self._pass()
 
     def test_decoder_rejects_empty_prompt(self) -> None:
-        self._title("TEST 3: EMPTY PROMPT SAFETY")
+        self._title("TEST 2: EMPTY PROMPT SAFETY")
         print("Input prompt: whitespace only")
         print("Expected: controlled GenerationError, no unexpected crash")
 
@@ -105,7 +106,8 @@ class CoreProjectTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             vocab_path = Path(directory) / "vocab.json"
             vocab_path.write_text(json.dumps({"dummy": 0}), encoding="utf-8")
-            decoder = ConstrainedDecoder(FakeModel(str(vocab_path)), [function])
+            decoder = ConstrainedDecoder(
+                FakeModel(str(vocab_path)), [function])
 
             with self.assertRaises(GenerationError):
                 decoder.generate("   ")
