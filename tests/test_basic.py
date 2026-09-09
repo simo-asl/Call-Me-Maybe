@@ -8,6 +8,7 @@ from pathlib import Path
 from src.decoder import ConstrainedDecoder
 from src.errors import GenerationError, InputError
 from src.models import FunctionDefinition, validate_functions
+from src.printing import Colors
 
 
 class FakeModel:
@@ -29,7 +30,17 @@ class FakeModel:
 class CoreProjectTests(unittest.TestCase):
     """Verify the stable guarantees provided by the project."""
 
+    def _title(self, text: str) -> None:
+        print(f"\n{Colors.YELLOW}=== {text} ==={Colors.RESET}")
+
+    def _pass(self) -> None:
+        print(f"{Colors.GREEN}[PASS]{Colors.RESET}")
+
     def test_schema_validation_rejects_duplicate_functions(self) -> None:
+        self._title("TEST 1: SCHEMA VALIDATION")
+        print("Input: two function definitions named 'add'")
+        print("Expected: duplicate function names must be rejected")
+
         function = {
             "name": "add",
             "description": "Add two numbers",
@@ -39,7 +50,15 @@ class CoreProjectTests(unittest.TestCase):
         with self.assertRaises(InputError):
             validate_functions([function, function])
 
+        print("Result: InputError raised correctly")
+        self._pass()
+
     def test_decoder_builds_schema_cache(self) -> None:
+        self._title("TEST 2: CONSTRAINED DECODER CACHE")
+        print("Function: add")
+        print("Schema: a -> number, b -> number")
+        print("Action: build ConstrainedDecoder cache from the schema")
+
         function = FunctionDefinition.model_validate({
             "name": "add",
             "description": "Add two numbers",
@@ -61,8 +80,22 @@ class CoreProjectTests(unittest.TestCase):
             self.assertEqual(decoder._cache.allowed_fn, ["add"])
             self.assertEqual(decoder._cache.func_params["add"], 2)
             self.assertEqual(decoder._cache.param_types["add"]["a"], "number")
+            self.assertEqual(decoder._cache.param_types["add"]["b"], "number")
+
+            print("Decoder detected:")
+            print(f"  allowed function : {decoder._cache.allowed_fn[0]}")
+            print(f"  parameter count  : {decoder._cache.func_params['add']}")
+            print("  parameter a type : number")
+            print("  parameter b type : number")
+
+        print("Result: decoder cache matches the function schema")
+        self._pass()
 
     def test_decoder_rejects_empty_prompt(self) -> None:
+        self._title("TEST 3: EMPTY PROMPT SAFETY")
+        print("Input prompt: whitespace only")
+        print("Expected: controlled GenerationError, no unexpected crash")
+
         function = FunctionDefinition.model_validate({
             "name": "ping",
             "description": "Simple function",
@@ -77,6 +110,9 @@ class CoreProjectTests(unittest.TestCase):
             with self.assertRaises(GenerationError):
                 decoder.generate("   ")
 
+        print("Result: GenerationError raised correctly")
+        self._pass()
+
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main(verbosity=2)
