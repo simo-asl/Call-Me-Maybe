@@ -1,52 +1,81 @@
-"""Small regression tests for input validation and JSON file handling."""
+"""Focused regression tests for the core function-calling pipeline."""
 
 import json
 import tempfile
 import unittest
 from pathlib import Path
 
-from src.errors import InputError
-from src.input_loader import read_json, write_results
-from src.models import validate_functions, validate_prompts
+from src.decoder import ConstrainedDecoder
+from src.errors import GenerationError, InputError
+from src.models import FunctionDefinition, validate_functions
 
 
-class BasicProjectTests(unittest.TestCase):
-    """Cover stable validation and file-handling behavior."""
+class FakeModel:
+    """Minimal model interface used to test decoder setup without inference."""
 
-    def test_validate_prompts_accepts_valid_input(self) -> None:
-        prompts = validate_prompts([{"prompt": "Add 2 and 3"}])
-        self.assertEqual(prompts[0].prompt, "Add 2 and 3")
+    def __init__(self, vocab_path: str) -> None:
+        self.vocab_path = vocab_path
 
-    def test_validate_prompts_rejects_duplicates(self) -> None:
-        with self.assertRaises(InputError):
-            validate_prompts([{"prompt": "hello"}, {"prompt": "hello"}])
+    def encode(self, text: str) -> list[int]:
+        return [0]
 
-    def test_validate_functions_rejects_duplicate_names(self) -> None:
+    def get_logits_from_input_ids(self, input_ids: list[int]) -> list[float]:
+        return [0.0] * 8
+
+    def get_path_to_vocab_file(self) -> str:
+        return self.vocab_path
+
+
+class CoreProjectTests(unittest.TestCase):
+    """Verify the stable guarantees provided by the project."""
+
+    def test_schema_validation_rejects_duplicate_functions(self) -> None:
         function = {
             "name": "add",
-            "description": "Add numbers",
+            "description": "Add two numbers",
             "parameters": {"a": {"type": "number"}},
             "returns": {"type": "number"},
         }
         with self.assertRaises(InputError):
             validate_functions([function, function])
 
-    def test_read_json_rejects_invalid_json(self) -> None:
+    def test_decoder_builds_schema_cache(self) -> None:
+        function = FunctionDefinition.model_validate({
+            "name": "add",
+            "description": "Add two numbers",
+            "parameters": {
+                "a": {"type": "number"},
+                "b": {"type": "number"},
+            },
+            "returns": {"type": "number"},
+        })
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "bad.json"
-            path.write_text("{bad json", encoding="utf-8")
-            with self.assertRaises(InputError):
-                read_json(str(path))
+            vocab_path = Path(directory) / "vocab.json"
+            vocab_path.write_text(
+                json.dumps({"dummy": 0, "{": 1, "}": 2, '"': 3,
+                            "name": 4, "parameters": 5, "0": 6, ".": 7}),
+                encoding="utf-8",
+            )
+            decoder = ConstrainedDecoder(FakeModel(str(vocab_path)), [function])
 
-    def test_write_and_read_results(self) -> None:
-        results = [
-            {"prompt": "Add 2 and 3", "name": "add", "parameters": {"a": 2}}
-        ]
+            self.assertEqual(decoder._cache.allowed_fn, ["add"])
+            self.assertEqual(decoder._cache.func_params["add"], 2)
+            self.assertEqual(decoder._cache.param_types["add"]["a"], "number")
+
+    def test_decoder_rejects_empty_prompt(self) -> None:
+        function = FunctionDefinition.model_validate({
+            "name": "ping",
+            "description": "Simple function",
+            "parameters": {},
+            "returns": {"type": "null"},
+        })
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "output" / "results.json"
-            write_results(str(path), results)
-            self.assertEqual(read_json(str(path)), results)
-            self.assertEqual(json.loads(path.read_text(encoding="utf-8")), results)
+            vocab_path = Path(directory) / "vocab.json"
+            vocab_path.write_text(json.dumps({"dummy": 0}), encoding="utf-8")
+            decoder = ConstrainedDecoder(FakeModel(str(vocab_path)), [function])
+
+            with self.assertRaises(GenerationError):
+                decoder.generate("   ")
 
 
 if __name__ == "__main__":
