@@ -8,6 +8,8 @@ from typing import Any
 
 import numpy as np
 
+from src.printing import show_token_debug
+
 
 @dataclass
 class ParameterState:
@@ -323,6 +325,14 @@ def select_token(
     selected_token = self._cache.vocab_dict.get(
         best_id,
         "",
+    )
+
+    show_token_debug(
+        context_size=len(input_ids),
+        allowed=int(np.count_nonzero(mask)),
+        vocab_size=len(logits),
+        token_id=best_id,
+        token=selected_token,
     )
 
     return best_id, selected_token
