@@ -116,10 +116,12 @@ class CallMeMaybe(BaseModel):
 
     def number_options(self, text: str) -> list[list[int]]:
         """Return numeric values found in the prompt as token sequences."""
-        return [self.encoder.encode(value) for value in NUMBER_PATTERN.findall(text)]
+        return [self.encoder.encode(
+            value) for value in NUMBER_PATTERN.findall(text)]
 
     def compatible_functions(self, text: str) -> list[Function]:
-        """Return functions whose argument types can be formed from the prompt."""
+        """Return functions whose argument
+        types can be formed from the prompt."""
         has_number = bool(NUMBER_PATTERN.search(text))
         compatible = [
             function
