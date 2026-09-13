@@ -26,6 +26,14 @@ class Function(BaseModel):
         self._t_name = encoder.encode(self._name)
         self._description = function.get('description', '')
         self._t_description = encoder.encode(self._description)
+        allowed_types = {'number', 'float', 'string', 'boolean', 'integer'}
+
+        for name, schema in function['parameters'].items():
+            if schema['type'] not in allowed_types:
+                raise ValueError(
+                    f"Unsupported parameter type '{
+                        schema['type']}' for '{name}'"
+                )
         self._params = {
             name: schema['type']
             for name, schema in function['parameters'].items()
