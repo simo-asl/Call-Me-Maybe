@@ -1,31 +1,12 @@
 """Constrained function selection and argument generation."""
 
 import json
-import re
 
 from pydantic import BaseModel
 
 from src.constrained_llm import LLM
 from src.function_schema import Function
 from src.token_encoder import Encoder
-
-
-REGEX_MAPPING = [
-    (['vowel', 'vowels'], r'[aeiouAEIOU]'),
-    (['consonant', 'consonants'],
-     r'[bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ]'),
-    (['digit', 'digits', 'number', 'numbers'], r'\\d+'),
-    (['uppercase', 'upper', 'capital'], r'[A-Z]+'),
-    (['lowercase', 'lower'], r'[a-z]+'),
-    (['letter', 'letters', 'alphabetic'], r'[a-zA-Z]+'),
-    (['space', 'spaces', 'whitespace'], r'\\s+'),
-    (['punctuation', 'special'], r'[^\w\s]'),
-    (['alphanumeric'], r'\\w+'),
-    (['newline', 'newlines'], r'\\n+'),
-    (['tab', 'tabs'], r'\\t+'),
-]
-
-NUMBER_PATTERN = re.compile(r'[-+]?\d+(?:\.\d+)?')
 
 
 def escape(text: str) -> str:
@@ -96,45 +77,68 @@ class CallMeMaybe(BaseModel):
             self.instruction_prefix + definitions + self.instruction_suffix
         )
 
-    def regex_pattern(self, text: str) -> list[int]:
-        """Infer a supported regex pattern from words in the prompt."""
-        words = {word.strip('\'\".,!?').lower() for word in text.split()}
-        for keywords, pattern in REGEX_MAPPING:
-            if words & set(keywords):
-                return self.encoder.encode(pattern)
+    def generate_number(
+        self,
+        tokens: list[int],
+        integer: bool = False,
+        max_tokens: int = 16,
+    ) -> list[int]:
+        """Generate a JSON number while masking invalid token choices."""
+        chars = '-0123456789' + ('' if integer else '.')
+        stop_ids = {
+            self.encoder.encode(char)[0]
+            for char in ',}'
+        }
+        allowed_ids = {
+            self.encoder.encode(char)[0]
+            for char in chars
+        }
+        result: list[int] = []
+        has_digit = False
+        dot_used = False
 
-        match = re.search(r"['\"](\w+)['\"]", text)
-        if match:
-            return self.encoder.encode(match.group(1))
-        return self.encoder.encode(r'\\w+')
+        for _ in range(max_tokens):
+            mask = set(allowed_ids)
+            if result:
+                mask.discard(self.encoder.encode('-')[0])
+            if not has_digit:
+                mask -= stop_ids
+                if not integer:
+                    mask.discard(self.encoder.encode('.')[0])
+            else:
+                mask |= stop_ids
+            if dot_used and not integer:
+                mask.discard(self.encoder.encode('.')[0])
 
-    def path_options(self, text: str) -> list[list[int]]:
-        """Return Unix or Windows filesystem paths found in the prompt."""
-        paths = re.findall(r'(?:[A-Za-z]:\\\\[^\s]+|/[^\s]+)', text)
-        return [
-            self.encoder.encode(path.strip('"\''))
-            for path in paths
-        ]
+            token = self.llm.next_token(tokens + result, mask)
+            text = self.encoder.decode(token)
+            if token in stop_ids:
+                break
+            result.append(token)
+            has_digit = has_digit or text.isdigit()
+            dot_used = dot_used or text == '.'
 
-    def number_options(self, text: str) -> list[list[int]]:
-        """Return numeric values found in the prompt as token sequences."""
-        return [self.encoder.encode(
-            value) for value in NUMBER_PATTERN.findall(text)]
+        if not has_digit:
+            raise ValueError('Could not generate a valid number')
+        return result
 
-    def compatible_functions(self, text: str) -> list[Function]:
-        """Return functions whose argument
-        types can be formed from the prompt."""
-        has_number = bool(NUMBER_PATTERN.search(text))
-        compatible = [
-            function
-            for function in self.functions.values()
-            if has_number
-            or not any(
-                param_type in ('number', 'float')
-                for param_type in function.params.values()
-            )
-        ]
-        return compatible or list(self.functions.values())
+    def generate_string(
+        self,
+        tokens: list[int],
+        max_tokens: int = 32,
+    ) -> str:
+        """Generate a string value until the model closes the quote."""
+        context = tokens + self.encoder.encode('"')
+        value = ''
+        for _ in range(max_tokens):
+            token = self.llm.next_token(context)
+            text = self.encoder.decode(token)
+            if '"' in text:
+                value += text.split('"', 1)[0]
+                break
+            value += text
+            context.append(token)
+        return value
 
     def add_args(
         self,
@@ -142,50 +146,32 @@ class CallMeMaybe(BaseModel):
         tokens: list[int],
         text: str,
     ) -> list[int]:
-        """Generate each function argument from constrained candidates."""
+        """Generate each function argument with schema constraints."""
+        del text
         for index, arg_name in enumerate(function.param_names):
             arg_type = function.params[arg_name]
             if index:
                 tokens += self.encoder.encode(', ')
             tokens += self.encoder.encode(f'"{arg_name}": ')
 
-            if arg_name == 'regex':
-                tokens += self.encoder.encode('"')
-                tokens += self.regex_pattern(text)
-                tokens += self.encoder.encode('"')
-                continue
-
             if arg_type == 'boolean':
                 options = [
                     self.encoder.encode('true'),
                     self.encoder.encode('false'),
                 ]
-            elif arg_type in ('number', 'float'):
-                options = self.number_options(text)
-            elif arg_name == 'path':
-                options = self.path_options(text)
-                if not options:
-                    options = self.encoder.encode_words_separated(text)
-            else:
-                options = self.encoder.encode_words_separated(text)
-
-            if not options:
-                raise ValueError(
-                    f"No valid {arg_type} candidate for argument '{arg_name}'"
+                tokens += self.llm.next_option(tokens, options)
+            elif arg_type in ('number', 'float', 'integer'):
+                tokens += self.generate_number(
+                    tokens,
+                    integer=arg_type == 'integer',
                 )
-
-            if arg_type == 'string':
-                tokens += self.encoder.encode('"')
-
-            selected = self.llm.next_option(tokens, options)
-            if arg_type in ('number', 'float'):
-                value = self.encoder.decode(selected)
-                if value.isdigit():
-                    selected += self.encoder.encode('.0')
-            tokens += selected
-
-            if arg_type == 'string':
-                tokens += self.encoder.encode('"')
+            elif arg_type == 'string':
+                value = self.generate_string(tokens)
+                tokens += self.encoder.encode(json.dumps(value))
+            else:
+                raise ValueError(
+                    f"Unsupported argument type '{arg_type}'"
+                )
 
         tokens += self.encoder.encode('}\n')
         return tokens
@@ -205,8 +191,10 @@ class CallMeMaybe(BaseModel):
         tokens = self.encoder.encode(text)
 
         self.set_tools()
-        candidates = self.compatible_functions(original_prompt)
-        function_names = [function.t_name for function in candidates]
+        function_names = [
+            function.t_name
+            for function in self.functions.values()
+        ]
         selected_name = self.llm.next_option(
             tokens,
             function_names,
@@ -222,7 +210,6 @@ class CallMeMaybe(BaseModel):
 
         raw = self.encoder.decode(tokens)
         tool_json = raw[raw.find('{"name":'):]
-        print(repr(tool_json))
         data = json.loads(tool_json)
 
         result = {
