@@ -219,7 +219,7 @@ class CallMeMaybe(BaseModel):
         tokens += function.t_name
         tokens += self.encoder.encode('", "arguments": {')
         self.set_tools(function)
-        tokens = self.add_args(function, tokens, original_prompt)
+        tokens = self.add_args(function, tokens, escaped_prompt)
         tokens += self.encoder.encode('}')
 
         raw = self.encoder.decode(tokens)

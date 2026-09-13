@@ -15,7 +15,6 @@ DEFAULT_MODEL = "Qwen/Qwen3-0.6B"
 ALLOWED_MODELS = (
     "Qwen/Qwen3-0.6B",
     "Qwen/Qwen2.5-0.5B",
-    "Qwen/Qwen2.5-1.5B",
 )
 
 
