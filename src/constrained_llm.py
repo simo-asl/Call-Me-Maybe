@@ -1,7 +1,7 @@
 """Small wrapper that applies token masks to raw LLM logits."""
 
 import numpy as np
-from llm_sdk import Small_LLM_Model
+from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 from pydantic import BaseModel, PrivateAttr
 
 from src.token_encoder import Encoder
@@ -76,7 +76,7 @@ class LLM(BaseModel):
         logits = self._llm.get_logits_from_input_ids(instruction + tokens)
         if mask is not None:
             logits = self._apply_mask(mask, logits)
-        return logits
+        return [float(value) for value in logits]
 
     @staticmethod
     def _apply_mask(
