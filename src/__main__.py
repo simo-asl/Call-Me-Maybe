@@ -12,6 +12,11 @@ from src.token_encoder import Encoder
 
 
 DEFAULT_MODEL = "Qwen/Qwen3-0.6B"
+ALLOWED_MODELS = (
+    "Qwen/Qwen3-0.6B",
+    "Qwen/Qwen2.5-0.5B",
+    "Qwen/Qwen2.5-1.5B",
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -31,6 +36,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         '--model',
+        choices=ALLOWED_MODELS,
         default=DEFAULT_MODEL,
         help=f'Hugging Face model name (default: {DEFAULT_MODEL})'
     )
@@ -62,7 +68,7 @@ if __name__ == "__main__":
         with open(args.output, 'w', encoding='utf-8') as output:
             output.write('[\n')
             for index, prompt in enumerate(prompts):
-                print(f"\n{index}. Processing '{prompt}'...")
+                print(f"\n{index}. Processing {prompt!r}...")
                 output.write(call_me_maybe.process_func(prompt))
                 output.write(',\n' if index < len(prompts) - 1 else '\n')
             output.write(']')

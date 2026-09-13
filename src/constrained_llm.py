@@ -35,11 +35,15 @@ class LLM(BaseModel):
         self,
         tokens: list[int],
         options: list[list[int]],
+        terminator: list[int] | None = None,
     ) -> list[int]:
         """Constrain generation to one complete token sequence in options."""
         result: list[int] = []
         context = tokens.copy()
-        remaining = options
+        remaining = [
+            option + (terminator or [])
+            for option in options
+        ]
 
         while remaining:
             allowed = {option[0] for option in remaining}
@@ -51,6 +55,9 @@ class LLM(BaseModel):
                 for option in remaining
                 if option[0] == token and len(option) > 1
             ]
+
+        if terminator:
+            return result[:-len(terminator)]
         return result
 
     def set_instruction(self, instruction: list[int] | str) -> None:

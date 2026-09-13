@@ -52,6 +52,10 @@ class CallMeMaybe(BaseModel):
         with open(function_definitions, 'r', encoding='utf-8') as file:
             for definition in json.load(file):
                 function = Function(definition, encoder)
+                if function.name in functions:
+                    raise ValueError(
+                        f"Duplicate function name: '{function.name}'"
+                    )
                 functions[function.name] = function
 
         definition_tokens = [
@@ -190,10 +194,11 @@ class CallMeMaybe(BaseModel):
 
     def process_func(self, prompt: str) -> str:
         """Generate one constrained function call for a user prompt."""
-        prompt = escape(prompt)
+        original_prompt = prompt
+        escaped_prompt = escape(prompt)
         text = (
             '<|im_start|>user\n'
-            + prompt
+            + escaped_prompt
             + '\n<|im_end|>\n'
             '<|im_start|>assistant\n'
             '<tool_call>\n'
@@ -202,15 +207,19 @@ class CallMeMaybe(BaseModel):
         tokens = self.encoder.encode(text)
 
         self.set_tools()
-        candidates = self.compatible_functions(prompt)
+        candidates = self.compatible_functions(original_prompt)
         function_names = [function.t_name for function in candidates]
-        selected_name = self.llm.next_option(tokens, function_names)
+        selected_name = self.llm.next_option(
+            tokens,
+            function_names,
+            terminator=self.encoder.encode('"'),
+        )
         function = self.functions[self.encoder.decode(selected_name)]
 
         tokens += function.t_name
         tokens += self.encoder.encode('", "arguments": {')
         self.set_tools(function)
-        tokens = self.add_args(function, tokens, prompt)
+        tokens = self.add_args(function, tokens, original_prompt)
         tokens += self.encoder.encode('}')
 
         raw = self.encoder.decode(tokens)
@@ -218,10 +227,9 @@ class CallMeMaybe(BaseModel):
         print(repr(tool_json))
         data = json.loads(tool_json)
 
-        return (
-            '\t{\n'
-            f'\t\t"prompt": "{prompt}",\n'
-            f'\t\t"name": "{data["name"]}",\n'
-            f'\t\t"parameters": {json.dumps(data["arguments"])}\n'
-            '\t}'
-        )
+        result = {
+            'prompt': original_prompt,
+            'name': data['name'],
+            'parameters': data['arguments'],
+        }
+        return json.dumps(result, ensure_ascii=False, indent=2)
