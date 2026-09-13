@@ -25,9 +25,7 @@ REGEX_MAPPING = [
     (['tab', 'tabs'], r'\\t+'),
 ]
 
-NUMBER_PATTERN = re.compile(
-    r'[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?'
-)
+NUMBER_PATTERN = re.compile(r'[-+]?\d+(?:\.\d+)?')
 
 
 def escape(text: str) -> str:
