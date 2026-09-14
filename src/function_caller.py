@@ -136,6 +136,73 @@ class CallMeMaybe(BaseModel):
 
         return result
 
+    def argument_context(
+        self,
+        function: Function,
+        prompt: str,
+        arg_name: str,
+        arg_type: str,
+        tokens: list[int],
+    ) -> list[int]:
+        """Build focused context for one function argument."""
+        instruction = (
+            'You are completing a function call.\n'
+            'For each parameter:\n'
+            '1. Read the parameter name and function description.\n'
+            '2. Search the user request for an explicit value.\n'
+            '3. If an explicit value exists, copy it exactly.\n'
+            '4. Never invent information.\n\n'
+            f'Function: {function.name}\n'
+            f'Description: {function.description}\n'
+            f'User request: {prompt}\n'
+            f'Parameter: {arg_name}\n'
+            f'Type: {arg_type}\n\n'
+            'Answer:\n'
+        )
+
+        return self.encoder.encode(instruction) + tokens
+
+    def regex_argument_context(
+        self,
+        function: Function,
+        prompt: str,
+        arg_name: str,
+        arg_type: str,
+        tokens: list[int],
+    ) -> list[int]:
+        """Build focused context for regex substitution arguments."""
+        instruction = (
+            'You are completing a regex substitution function call.\n'
+            'Generate only the requested parameter value.\n'
+            'Use the function description and the user request.\n'
+        )
+
+        if arg_name == 'regex':
+            instruction += (
+                'If the user explicitly provides literal text or a word to '
+                'match, preserve that literal value exactly.\n'
+                'Only generate a general regular-expression pattern when the '
+                'user describes a class or category of values.\n'
+                'Do not combine separate occurrences from the source string '
+                'into a larger pattern.\n'
+            )
+        elif arg_name == 'replacement':
+            instruction += (
+                'Use the replacement requested by the user.\n'
+                'Preserve explicit replacement values exactly.\n'
+            )
+
+        instruction += (
+            f'\nFunction: {function.name}\n'
+            f'Description: {function.description}\n'
+            f'User request: {prompt}\n'
+            f'Parameter: {arg_name}\n'
+            f'Type: {arg_type}\n\n'
+            'Answer:\n'
+        )
+
+        return self.encoder.encode(instruction) + tokens
+
     def generate_string(
         self,
         tokens: list[int],
@@ -169,47 +236,6 @@ class CallMeMaybe(BaseModel):
             context.append(token)
 
         return value
-
-    def argument_context(
-        self,
-        function: Function,
-        prompt: str,
-        arg_name: str,
-        arg_type: str,
-        tokens: list[int],
-    ) -> list[int]:
-        """Build focused context for one function argument."""
-        instruction = (
-            'You are completing a function call.\n'
-            'For each parameter:\n'
-            '1. Read the parameter name and function description.\n'
-            '2. Search the user request for the intended value.\n'
-            '3. Preserve explicit string values exactly when appropriate.\n'
-            '4. Never invent information.\n'
-        )
-
-        if arg_name == 'regex':
-            instruction += (
-                'For a regex parameter, generate the regular-expression '
-                'pattern described by the user, not the matching examples '
-                'found in the source text.\n'
-            )
-        elif arg_name == 'replacement':
-            instruction += (
-                'For a replacement parameter, return the actual replacement '
-                'text or symbol requested by the user.\n'
-            )
-
-        instruction += (
-            f'\nFunction: {function.name}\n'
-            f'Description: {function.description}\n'
-            f'User request: {prompt}\n'
-            f'Parameter: {arg_name}\n'
-            f'Type: {arg_type}\n\n'
-            'Answer:\n'
-        )
-
-        return self.encoder.encode(instruction) + tokens
 
     def add_args(
         self,
@@ -248,18 +274,25 @@ class CallMeMaybe(BaseModel):
                 tokens += selected
 
             elif arg_type == 'string':
-                context = self.argument_context(
-                    function,
-                    text,
-                    arg_name,
-                    arg_type,
-                    tokens,
-                )
+                if arg_name in ('regex', 'replacement'):
+                    context = self.regex_argument_context(
+                        function,
+                        text,
+                        arg_name,
+                        arg_type,
+                        tokens,
+                    )
+                else:
+                    context = self.argument_context(
+                        function,
+                        text,
+                        arg_name,
+                        arg_type,
+                        tokens,
+                    )
 
                 self.llm.set_instruction([])
-
                 raw_value = self.generate_string(context)
-
                 self.set_tools(function)
 
                 try:
@@ -267,10 +300,7 @@ class CallMeMaybe(BaseModel):
                 except json.JSONDecodeError:
                     value = raw_value
 
-                tokens += self.encoder.encode(
-                    json.dumps(value)
-                )
-
+                tokens += self.encoder.encode(json.dumps(value))
             else:
                 raise ValueError(
                     f"Unsupported argument type '{arg_type}'"
