@@ -9,40 +9,45 @@ from src.token_encoder import Encoder
 
 
 class Function(BaseModel):
-    """Store one function definition and its pre-encoded token data."""
+    """Store one function definition and its encoded token data."""
 
     _name: str = PrivateAttr()
     _t_name: list[int] = PrivateAttr()
     _description: str = PrivateAttr()
-    _t_description: list[int] = PrivateAttr()
     _params: dict[str, str] = PrivateAttr()
-    _t_params: dict[str, list[int]] = PrivateAttr()
     _t_definition: list[int] = PrivateAttr()
 
     def __init__(self, function: dict[str, Any], encoder: Encoder):
         """Build a function object from one JSON definition."""
         super().__init__()
+
         self._name = function['name']
         self._t_name = encoder.encode(self._name)
         self._description = function.get('description', '')
-        self._t_description = encoder.encode(self._description)
-        allowed_types = {'number', 'float', 'string', 'boolean', 'integer'}
+
+        allowed_types = {
+            'number',
+            'float',
+            'string',
+            'boolean',
+            'integer',
+        }
 
         for name, schema in function['parameters'].items():
             if schema['type'] not in allowed_types:
                 raise ValueError(
-                    f"Unsupported parameter type '{
-                        schema['type']}' for '{name}'"
+                    f"Unsupported parameter type "
+                    f"'{schema['type']}' for '{name}'"
                 )
+
         self._params = {
             name: schema['type']
             for name, schema in function['parameters'].items()
         }
-        self._t_params = {
-            name: encoder.encode(schema['type'])
-            for name, schema in function['parameters'].items()
-        }
-        self._t_definition = encoder.encode(self._to_tool_schema())
+
+        self._t_definition = encoder.encode(
+            self._to_tool_schema()
+        )
 
     def _to_tool_schema(self) -> str:
         """Return the function definition as a JSON tool schema string."""
@@ -50,6 +55,7 @@ class Function(BaseModel):
             name: {'type': param_type}
             for name, param_type in self._params.items()
         }
+
         return json.dumps({
             'name': self._name,
             'description': self._description,
@@ -59,11 +65,6 @@ class Function(BaseModel):
                 'required': list(self._params),
             },
         })
-
-    @property
-    def t_definition(self) -> list[int]:
-        """Return encoded tool schema tokens."""
-        return self._t_definition
 
     @property
     def name(self) -> str:
@@ -81,21 +82,16 @@ class Function(BaseModel):
         return self._description
 
     @property
-    def t_description(self) -> list[int]:
-        """Return encoded function-description tokens."""
-        return self._t_description
-
-    @property
     def params(self) -> dict[str, str]:
         """Return parameter names mapped to their declared types."""
         return self._params
 
     @property
-    def t_params(self) -> dict[str, list[int]]:
-        """Return encoded parameter-type tokens."""
-        return self._t_params
+    def param_names(self) -> list[str]:
+        """Return parameter names in declaration order."""
+        return list(self._params)
 
     @property
-    def param_names(self) -> list[str]:
-        """Return parameter names in their original declaration order."""
-        return list(self._params)
+    def t_definition(self) -> list[int]:
+        """Return encoded tool-schema tokens."""
+        return self._t_definition

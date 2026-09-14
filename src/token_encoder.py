@@ -1,16 +1,7 @@
 """Token encoding helpers used by the constrained decoder."""
 
-import re
 from typing import Any
-
 from pydantic import BaseModel, PrivateAttr
-
-
-WORD_PATTERN = re.compile(r'''
-    "(?:\\.|[^"])*"   |
-    '(?:\\.|[^'])*'   |
-    \S+
-''', re.VERBOSE)
 
 
 class Encoder(BaseModel):
@@ -56,32 +47,6 @@ class Encoder(BaseModel):
                 index += match_len
             else:
                 index += 1
-        return ids
-
-    def encode_words(self, text: str) -> set[int]:
-        """Return all token ids found in prompt words."""
-        ids: set[int] = set()
-        words = WORD_PATTERN.findall(text)
-        for word in words:
-            word = word.strip('.,!?').strip('"\'')
-            if not word:
-                continue
-            ids.update(self.encode(word))
-            ids.add(self.encode(' ' + word)[0])
-        return ids
-
-    def encode_words_separated(self, text: str) -> list[list[int]]:
-        """Return separately tokenized candidate values from a prompt."""
-        ids: list[list[int]] = []
-        colon_match = re.search(r':\s*(.+)$', text)
-        if colon_match:
-            ids.append(self.encode(colon_match.group(1).strip()))
-
-        unescaped = text.replace('\\"', '"')
-        for part in WORD_PATTERN.findall(unescaped):
-            part = part.strip('".,!?:;\\').strip("'")
-            if part:
-                ids.append(self.encode(part))
         return ids
 
     def decode(self, tokens: list[int] | int) -> str:
