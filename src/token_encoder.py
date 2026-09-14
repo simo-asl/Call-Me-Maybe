@@ -85,12 +85,15 @@ class Encoder(BaseModel):
         return ids
 
     def decode(self, tokens: list[int] | int) -> str:
-        """Translate token ids back to readable text."""
         if isinstance(tokens, int):
-            return self._vocab[tokens] or ''
-        return special_to_standard(
-            ''.join(self._vocab[token] or '' for token in tokens)
-        )
+            text = self._vocab[tokens] or ''
+        else:
+            text = ''.join(
+                self._vocab[token] or ''
+                for token in tokens
+            )
+
+        return special_to_standard(text)
 
 
 def special_to_standard(text: str) -> str:
