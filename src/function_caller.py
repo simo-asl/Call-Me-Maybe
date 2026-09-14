@@ -85,7 +85,7 @@ class CallMeMaybe(BaseModel):
         self,
         tokens: list[int],
         integer: bool = False,
-        max_tokens: int = 16,
+        max_tokens: int = 64,
     ) -> list[int]:
         """Generate a JSON number while masking invalid token choices."""
         chars = '-0123456789' + ('' if integer else '.')
@@ -206,7 +206,7 @@ class CallMeMaybe(BaseModel):
     def generate_string(
         self,
         tokens: list[int],
-        max_tokens: int = 32,
+        max_tokens: int = 128,
     ) -> str:
         """Generate JSON string content until an unescaped quote."""
         context = tokens + self.encoder.encode('"')

@@ -64,13 +64,21 @@ if __name__ == "__main__":
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
 
+        results = []
+
+        for index, prompt in enumerate(prompts):
+            print(f"\n{index}. Processing {prompt!r}...")
+
+            result = call_me_maybe.process_func(prompt)
+            results.append(json.loads(result))
+
         with open(args.output, 'w', encoding='utf-8') as output:
-            output.write('[\n')
-            for index, prompt in enumerate(prompts):
-                print(f"\n{index}. Processing {prompt!r}...")
-                output.write(call_me_maybe.process_func(prompt))
-                output.write(',\n' if index < len(prompts) - 1 else '\n')
-            output.write(']')
+            json.dump(
+                results,
+                output,
+                ensure_ascii=False,
+                indent=2,
+            )
         print('Finished.')
 
     except FileNotFoundError as error:
