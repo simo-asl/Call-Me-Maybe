@@ -127,17 +127,32 @@ class CallMeMaybe(BaseModel):
         tokens: list[int],
         max_tokens: int = 32,
     ) -> str:
-        """Generate a string value until the model closes the quote."""
+        """Generate JSON string content until an unescaped quote."""
         context = tokens + self.encoder.encode('"')
         value = ''
+
         for _ in range(max_tokens):
             token = self.llm.next_token(context)
             text = self.encoder.decode(token)
-            if '"' in text:
-                value += text.split('"', 1)[0]
-                break
-            value += text
+            candidate = value + text
+
+            quote = candidate.find('"')
+            while quote != -1:
+                backslashes = 0
+                index = quote - 1
+
+                while index >= 0 and candidate[index] == '\\':
+                    backslashes += 1
+                    index -= 1
+
+                if backslashes % 2 == 0:
+                    return candidate[:quote]
+
+                quote = candidate.find('"', quote + 1)
+
+            value = candidate
             context.append(token)
+
         return value
 
     def add_args(
@@ -161,12 +176,25 @@ class CallMeMaybe(BaseModel):
                 ]
                 tokens += self.llm.next_option(tokens, options)
             elif arg_type in ('number', 'float', 'integer'):
-                tokens += self.generate_number(
+                selected = self.generate_number(
                     tokens,
                     integer=arg_type == 'integer',
                 )
+
+                if arg_type in ('number', 'float'):
+                    value = self.encoder.decode(selected)
+                    if '.' not in value:
+                        selected += self.encoder.encode('.0')
+
+                tokens += selected
             elif arg_type == 'string':
-                value = self.generate_string(tokens)
+                raw_value = self.generate_string(tokens)
+
+                try:
+                    value = json.loads(f'"{raw_value}"')
+                except json.JSONDecodeError:
+                    value = raw_value
+
                 tokens += self.encoder.encode(json.dumps(value))
             else:
                 raise ValueError(
@@ -179,10 +207,9 @@ class CallMeMaybe(BaseModel):
     def process_func(self, prompt: str) -> str:
         """Generate one constrained function call for a user prompt."""
         original_prompt = prompt
-        escaped_prompt = escape(prompt)
         text = (
             '<|im_start|>user\n'
-            + escaped_prompt
+            + original_prompt
             + '\n<|im_end|>\n'
             '<|im_start|>assistant\n'
             '<tool_call>\n'
@@ -205,11 +232,16 @@ class CallMeMaybe(BaseModel):
         tokens += function.t_name
         tokens += self.encoder.encode('", "arguments": {')
         self.set_tools(function)
-        tokens = self.add_args(function, tokens, escaped_prompt)
+        tokens = self.add_args(
+            function,
+            tokens,
+            original_prompt,
+        )
         tokens += self.encoder.encode('}')
 
         raw = self.encoder.decode(tokens)
         tool_json = raw[raw.find('{"name":'):]
+        print(repr(tool_json))
         data = json.loads(tool_json)
 
         result = {
