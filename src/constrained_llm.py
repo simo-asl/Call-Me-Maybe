@@ -60,7 +60,7 @@ class LLM(BaseModel):
             return result[:-len(terminator)]
         return result
 
-    def set_instruction(self, instruction: list[int] | str) -> None:
+    def set_instruction(self, instruction: list[int]) -> None:
         """Set the system/tool instruction prepended to model context."""
         self._instruction_tokens = instruction
 
