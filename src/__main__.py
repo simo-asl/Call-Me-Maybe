@@ -1,6 +1,7 @@
 """Command-line entry point for the Call Me Maybe program."""
 
 import argparse
+import time
 import json
 import os
 
@@ -9,6 +10,7 @@ from llm_sdk import Small_LLM_Model  # type: ignore[attr-defined]
 from src.constrained_llm import LLM
 from src.function_caller import CallMeMaybe
 from src.token_encoder import Encoder
+from src.parser import load_prompts
 
 
 DEFAULT_MODEL = "Qwen/Qwen3-0.6B"
@@ -57,8 +59,7 @@ if __name__ == "__main__":
         llm = LLM(llm_model, encoder)
         call_me_maybe = CallMeMaybe(llm, args.functions_definition)
 
-        with open(args.input, encoding='utf-8') as requests:
-            prompts = [item['prompt'] for item in json.load(requests)]
+        prompts = load_prompts(args.input)
 
         output_dir = os.path.dirname(args.output)
         if output_dir:
@@ -66,6 +67,7 @@ if __name__ == "__main__":
 
         results = []
 
+        start_time = time.perf_counter()
         for index, prompt in enumerate(prompts):
             print(f"\n{index}. Processing {prompt!r}...")
 
@@ -79,7 +81,9 @@ if __name__ == "__main__":
                 ensure_ascii=False,
                 indent=2,
             )
+        elapsed = time.perf_counter() - start_time
         print('Finished.')
+        print(f"Generation time: {elapsed:.2f} seconds")
 
     except FileNotFoundError as error:
         print(f"File not found: {error.filename}")
