@@ -7,6 +7,8 @@ from pydantic import BaseModel
 from src.constrained_llm import LLM
 from src.function_schema import Function
 from src.token_encoder import Encoder
+from src.parser import reject_duplicates as rej_dup
+from src.parser import load_functions
 
 
 class CallMeMaybe(BaseModel):
@@ -25,8 +27,11 @@ class CallMeMaybe(BaseModel):
         functions: dict[str, Function] = {}
 
         with open(function_definitions, 'r', encoding='utf-8') as file:
-            for definition in json.load(file):
-                function = Function(definition, encoder)
+            for definition in load_functions(function_definitions):
+                function = Function(
+                    definition.model_dump(),
+                    encoder,
+                )
 
                 if function.name in functions:
                     raise ValueError(
@@ -85,7 +90,7 @@ class CallMeMaybe(BaseModel):
         self,
         tokens: list[int],
         integer: bool = False,
-        max_tokens: int = 64,
+        max_tokens: int = 16,
     ) -> list[int]:
         """Generate a JSON number while masking invalid token choices."""
         chars = '-0123456789' + ('' if integer else '.')
@@ -206,7 +211,7 @@ class CallMeMaybe(BaseModel):
     def generate_string(
         self,
         tokens: list[int],
-        max_tokens: int = 128,
+        max_tokens: int = 32,
     ) -> str:
         """Generate JSON string content until an unescaped quote."""
         context = tokens + self.encoder.encode('"')
