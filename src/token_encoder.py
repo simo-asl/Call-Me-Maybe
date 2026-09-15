@@ -50,6 +50,8 @@ class Encoder(BaseModel):
         return ids
 
     def decode(self, tokens: list[int] | int) -> str:
+        """Translate token IDs to text."""
+
         if isinstance(tokens, int):
             text = self._vocab[tokens] or ''
         else:
