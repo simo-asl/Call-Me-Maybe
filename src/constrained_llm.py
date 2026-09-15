@@ -62,8 +62,6 @@ class LLM(BaseModel):
 
     def set_instruction(self, instruction: list[int] | str) -> None:
         """Set the system/tool instruction prepended to model context."""
-        if isinstance(instruction, str):
-            instruction = self._encoder.encode(instruction)
         self._instruction_tokens = instruction
 
     def get_logits(
