@@ -27,6 +27,7 @@ src/
 ├── constrained_llm.py
 ├── function_caller.py
 ├── function_schema.py
+├── parser.py
 └── token_encoder.py
 ```
 
@@ -56,7 +57,6 @@ The currently supported parameter types are:
 
 ```text
 number
-float
 integer
 string
 boolean
@@ -69,6 +69,11 @@ Unsupported parameter types are rejected instead of being generated incorrectly.
 `LLM` is a small wrapper around `Small_LLM_Model`. It is responsible for retrieving logits, applying token masks, selecting the highest-scoring allowed token, and selecting one complete sequence from a list of valid token sequences.
 
 Only public SDK functionality is used to interact with the model.
+
+### `parser.py`
+
+parser.py validates prompt and function-definition JSON with Pydantic
+and rejects duplicate JSON keys before they can be overwritten.
 
 ### `function_caller.py`
 
@@ -249,11 +254,11 @@ false
 
 The LLM chooses between these two valid JSON values.
 
-#### Number, float, and integer
+#### Number and integer
 
 Numeric generation uses a restricted character set. Only digits and the characters valid for the requested numeric type are available. The generator also tracks whether a digit has already appeared and whether a decimal point has already been used.
 
-For `integer`, the decimal point is not allowed. For `number` and `float`, a generated integer value is normalized with `.0` when necessary.
+For `integer`, the decimal point is not allowed. For `number`, a generated integer value is normalized with `.0` when necessary.
 
 This prevents a numeric parameter from becoming arbitrary text.
 
