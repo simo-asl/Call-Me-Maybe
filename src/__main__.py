@@ -74,6 +74,8 @@ if __name__ == "__main__":
             result = call_me_maybe.process_func(prompt)
             results.append(json.loads(result))
 
+        elapsed = time.perf_counter() - start_time
+
         with open(args.output, 'w', encoding='utf-8') as output:
             json.dump(
                 results,
@@ -81,7 +83,7 @@ if __name__ == "__main__":
                 ensure_ascii=False,
                 indent=2,
             )
-        elapsed = time.perf_counter() - start_time
+
         print('Finished.')
         print(f"Generation time: {elapsed:.2f} seconds")
 
