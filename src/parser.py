@@ -79,10 +79,7 @@ class FunctionModel(BaseModel):
 
     name: Identifier
     description: NonEmptyString
-    parameters: Annotated[
-        dict[Identifier, TypeModel],
-        Field(min_length=1),
-    ]
+    parameters: dict[Identifier, TypeModel]
     returns: TypeModel
 
     model_config = ConfigDict(extra="forbid")
