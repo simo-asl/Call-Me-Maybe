@@ -7,7 +7,6 @@ from pydantic import BaseModel
 from src.constrained_llm import LLM
 from src.function_schema import Function
 from src.token_encoder import Encoder
-from src.parser import reject_duplicates as rej_dup
 from src.parser import load_functions
 
 
@@ -26,19 +25,18 @@ class CallMeMaybe(BaseModel):
         encoder = llm.encoder
         functions: dict[str, Function] = {}
 
-        with open(function_definitions, 'r', encoding='utf-8') as file:
-            for definition in load_functions(function_definitions):
-                function = Function(
-                    definition.model_dump(),
-                    encoder,
+        for definition in load_functions(function_definitions):
+            function = Function(
+                definition.model_dump(),
+                encoder,
+            )
+
+            if function.name in functions:
+                raise ValueError(
+                    f"Duplicate function name: '{function.name}'"
                 )
 
-                if function.name in functions:
-                    raise ValueError(
-                        f"Duplicate function name: '{function.name}'"
-                    )
-
-                functions[function.name] = function
+            functions[function.name] = function
 
         definition_tokens = [
             token
