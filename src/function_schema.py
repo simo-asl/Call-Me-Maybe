@@ -23,7 +23,7 @@ class Function(BaseModel):
 
         self._name = function['name']
         self._t_name = encoder.encode(self._name)
-        self._description = function.get('description', '')
+        self._description = function.get('description')
 
         self._params = {
             name: schema['type']
